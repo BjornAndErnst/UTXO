@@ -1,0 +1,62 @@
+entity utxo {
+    pubkey;
+    amount: integer;
+}
+
+function transfer (inputs: list<utxo>, output_pubkeys: list<pubkey>, output_amounts: list<integer>) {  
+	var input_sum = 0;
+	for (an_utxo in inputs) {
+		input_sum += an_utxo.amount;
+	delete utxo@{utxo == an_utxo};
+	}
+	 var output_sum = 0;
+	 require(output_pubkeys.size() == output_amounts.size());
+	 for (out_index in range(output_pubkeys.size())) {
+	     output_sum += output_amounts[out_index];
+	     create utxo (output_pubkeys[out_index],output_amounts[out_index]);
+	  }
+	  require(output_sum <= input_sum);
+	}
+
+operation transfer_calculator(stringed_pubkey_from:text, stringed_pubkey_to: text,amount:integer){	
+	var from_pubkey = byte_array(stringed_pubkey_from);
+	require( op_context.is_signer(from_pubkey) );
+	var to_pubkey = byte_array(stringed_pubkey_to);
+	require((utxo@*{.pubkey == from_pubkey} limit 1).size() > 0 );
+	var utxoSum = 0;
+	var inputUtxos = list<utxo>();
+	var output_pubkeys = list<pubkey>();
+	var output_amounts = list<integer>();
+	val utxoList = utxo @*{.pubkey == from_pubkey};
+	for(utxo in utxoList){ 
+		utxoSum += utxo.amount;
+		inputUtxos.add(utxo);
+		if(utxoSum > amount){
+			break;
+			} 
+	}
+	var returned_UtxoAmount = utxoSum - amount;
+	output_pubkeys.add(from_pubkey);
+	output_amounts.add(returned_UtxoAmount);
+	output_pubkeys.add(to_pubkey);
+	output_amounts.add(amount);
+	transfer(inputUtxos,output_pubkeys,output_amounts);
+}	
+
+query getAmount(stringed_pubkey:text): integer {
+	var amount = 0;
+	var pubkey = byte_array(stringed_pubkey);
+	var UtxoList = utxo@*{.pubkey == pubkey};
+	for (i in range(UtxoList.size())){
+		amount+= UtxoList[i].amount;
+	}
+	return amount;
+}
+
+operation init(pubkey) {
+	require( (utxo@*{} limit 1).size() == 0 );
+    create utxo(pubkey = pubkey,amount = 1000);
+    create utxo(pubkey = pubkey,amount = 500);
+    create utxo(pubkey = pubkey,amount = 2000);
+}
+
